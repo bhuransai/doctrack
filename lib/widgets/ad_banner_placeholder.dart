@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
@@ -6,6 +7,9 @@ import '../theme/app_theme.dart';
 /// than paid — this is the slot a real ad SDK (e.g. Google Mobile Ads)
 /// would render into; wire `google_mobile_ads`'s `BannerAd` widget in here
 /// when a publisher account/ad unit id is available.
+///
+/// Until then it renders nothing in release builds, so users never see an
+/// empty "Ad space" box; debug and profile builds still show the slot.
 class AdBannerPlaceholder extends StatelessWidget {
   // Deliberately not a const constructor: build() reads the live theme via
   // AppColors, and a `const AdBannerPlaceholder()` instance would let
@@ -16,6 +20,7 @@ class AdBannerPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (kReleaseMode) return const SizedBox.shrink();
     return Container(
       height: 56,
       decoration: BoxDecoration(

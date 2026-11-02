@@ -33,7 +33,9 @@ class RemindersScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${store.reminderFeed.length} SCHEDULED',
+                        store.settings.notificationsEnabled
+                            ? '${store.reminderFeed.where((r) => !r.overdue).length} UPCOMING'
+                            : 'NOTIFICATIONS OFF',
                         style: AppText.mono(size: 10, weight: FontWeight.w500, color: AppColors.textFaint, letterSpacing: 1.4),
                       ),
                       const SizedBox(height: 5),

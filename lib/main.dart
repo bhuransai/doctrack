@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/app_shell.dart';
@@ -26,13 +27,9 @@ void main() async {
     today: today,
   );
 
-  if (settings.notificationsEnabled) {
-    final granted = await notifications.requestPermission();
-    if (granted) {
-      // ignore: unawaited_futures
-      notifications.rescheduleAll(docs, userName: settings.userName);
-    }
-  }
+  // Check (don't prompt) at launch: the first request happens on the
+  // welcome screen's "Get started", or from the Settings toggle.
+  unawaited(store.refreshNotificationPermission());
 
   runApp(DocTrackApp(store: store));
 }
@@ -56,8 +53,9 @@ class DocTrackApp extends StatelessWidget {
 /// [MaterialApp.themeMode] and every [AppColors] getter picked up during
 /// this rebuild reflect the new choice.
 ///
-/// It also refreshes [DocStore.today] whenever the app returns to the
-/// foreground, so countdowns don't go stale overnight.
+/// It also refreshes [DocStore.today] and the notification permission
+/// whenever the app returns to the foreground, and repaints when the OS
+/// switches between light and dark.
 class _AppRoot extends StatefulWidget {
   const _AppRoot();
 
@@ -65,21 +63,30 @@ class _AppRoot extends StatefulWidget {
   State<_AppRoot> createState() => _AppRootState();
 }
 
-class _AppRootState extends State<_AppRoot> {
-  late final AppLifecycleListener _lifecycle;
-
+class _AppRootState extends State<_AppRoot> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(
-      onResume: () => context.read<DocStore>().refreshToday(),
-    );
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
-    _lifecycle.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final store = context.read<DocStore>();
+    store.refreshToday();
+    unawaited(store.refreshNotificationPermission());
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    context.read<DocStore>().onPlatformBrightnessChanged();
   }
 
   @override

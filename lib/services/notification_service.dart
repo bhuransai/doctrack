@@ -54,6 +54,7 @@ class NotificationService {
 
   Future<bool> requestPermission() async {
     await init();
+    if (!_available) return _permissionGranted = false;
     try {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
@@ -76,6 +77,29 @@ class NotificationService {
     // (e.g. tests): nothing to request, treat as unavailable but not blocking.
     _permissionGranted = false;
     return false;
+  }
+
+  /// Re-reads whether notifications are allowed, without prompting — for
+  /// launch, and for when the user may have changed it in system settings.
+  Future<bool> checkPermission() async {
+    await init();
+    if (!_available) return _permissionGranted = false;
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        return _permissionGranted = await android.areNotificationsEnabled() ?? false;
+      }
+      final ios = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      if (ios != null) {
+        final options = await ios.checkPermissions();
+        return _permissionGranted = options?.isEnabled ?? false;
+      }
+    } catch (e) {
+      debugPrint('DocTrack: could not check notification permission: $e');
+    }
+    return _permissionGranted = false;
   }
 
   Future<void> cancelForDocument(int docId) async {

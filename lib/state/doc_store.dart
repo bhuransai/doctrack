@@ -10,6 +10,8 @@ import '../utils/date_utils.dart';
 
 class ReminderEntry {
   final DocRecord doc;
+  /// True for the "has expired" alert, as opposed to an upcoming reminder.
+  final bool overdue;
   final DateTime when;
   final String title;
   final String sub;
@@ -20,6 +22,7 @@ class ReminderEntry {
     required this.title,
     required this.sub,
     required this.tag,
+    this.overdue = false,
   });
 }
 
@@ -237,9 +240,33 @@ class DocStore extends ChangeNotifier {
     if (enabled) {
       final granted = await notifications.requestPermission();
       if (granted) _rescheduleAll();
+      // Settings shows a "permission not granted" notice; refresh it now
+      // that the prompt has been answered.
+      notifyListeners();
     } else {
       await notifications.cancelAll();
     }
+  }
+
+  /// Re-checks the OS notification permission without prompting — at launch
+  /// and whenever the app returns to the foreground, since the user may have
+  /// allowed (or blocked) DocTrack in system settings meanwhile. Reminders
+  /// are (re)scheduled when permission is found granted.
+  Future<void> refreshNotificationPermission() async {
+    if (!settings.notificationsEnabled) return;
+    final wasGranted = notifications.permissionGranted;
+    final granted = await notifications.checkPermission();
+    // Only on a change: at launch (starts ungranted) or after the user
+    // allowed notifications in system settings — not on every resume.
+    if (granted && !wasGranted) _rescheduleAll();
+    if (granted != wasGranted) notifyListeners();
+  }
+
+  /// Called when the OS switches between light and dark. In "System" theme
+  /// mode every [AppColors] getter now resolves differently, so rebuild all
+  /// listening screens — the same path [setThemeMode] relies on.
+  void onPlatformBrightnessChanged() {
+    if (ThemeController.instance.mode == AppThemeMode.system) notifyListeners();
   }
 
   void setDefaultReminderDays(List<int> days) {
@@ -268,10 +295,20 @@ class DocStore extends ChangeNotifier {
   /// Called once, from the welcome screen's "Get started" — records the
   /// (optional) name and marks onboarding done so the app opens straight
   /// into Documents on every later launch.
+  ///
+  /// This is also where notification permission is first requested, so the
+  /// prompt appears after the user has seen what DocTrack is for rather
+  /// than over a blank launch screen.
   void completeOnboarding(String name) {
     settings = settings.copyWith(userName: name.trim(), onboardingComplete: true);
     notifyListeners();
     unawaited(storage.saveSettings(settings));
+    if (settings.notificationsEnabled) {
+      unawaited(notifications.requestPermission().then((granted) {
+        if (granted) _rescheduleAll();
+        notifyListeners();
+      }));
+    }
   }
 
   void _persist() {
@@ -302,6 +339,7 @@ class DocStore extends ChangeNotifier {
           title: '${d.name} has expired',
           sub: 'Expired ${fmtDate(d.expiry)} · renew now',
           tag: 'Now',
+          overdue: true,
         ));
       }
       for (final n in d.reminderDays) {

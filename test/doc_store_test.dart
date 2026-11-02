@@ -242,4 +242,55 @@ void main() {
       expect(daysBetween(DateTime(2026, 1, 1), DateTime(2026, 1, 2)), -1);
     });
   });
+
+  group('live updates', () {
+    tearDown(() => ThemeController.instance.setMode(AppThemeMode.system));
+
+    test('OS brightness change rebuilds listeners only in System theme mode', () {
+      final store = _buildStore();
+      var notified = 0;
+      store.addListener(() => notified++);
+
+      store.setThemeMode(AppThemeMode.system);
+      notified = 0;
+      store.onPlatformBrightnessChanged();
+      expect(notified, 1);
+
+      store.setThemeMode(AppThemeMode.dark);
+      notified = 0;
+      store.onPlatformBrightnessChanged();
+      expect(notified, 0);
+    });
+
+    test('setNotificationsEnabled notifies again once the prompt is answered', () async {
+      final store = _buildStore();
+      var notified = 0;
+      store.addListener(() => notified++);
+      await store.setNotificationsEnabled(true);
+      expect(notified, 2);
+    });
+
+    test('reminderFeed marks expired-document alerts as overdue', () {
+      final today = DateTime(2026, 7, 29);
+      final store = _buildStore(today: today, docs: [
+        DocRecord(
+          id: 1,
+          type: DocType.passport,
+          name: 'Old passport',
+          issued: DateTime(2016, 1, 1),
+          expiry: DateTime(2026, 7, 1),
+        ),
+        DocRecord(
+          id: 2,
+          type: DocType.insurance,
+          name: 'Car insurance',
+          issued: DateTime(2025, 9, 1),
+          expiry: DateTime(2026, 9, 1),
+        ),
+      ]);
+      final feed = store.reminderFeed;
+      expect(feed.where((r) => r.overdue).map((r) => r.doc.id), [1]);
+      expect(feed.where((r) => !r.overdue).every((r) => r.doc.id == 2), isTrue);
+    });
+  });
 }
